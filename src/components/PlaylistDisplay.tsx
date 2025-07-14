@@ -175,7 +175,7 @@ export const PlaylistDisplay = ({ timeOfDay, mood, isSpotifyConnected }: Playlis
       <div className={`bg-gradient-to-br ${getPlaylistGradient()} backdrop-blur-sm rounded-3xl p-8 border border-white/20`}>
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
-            {currentData.image && (
+            {('image' in currentData) && currentData.image && (
               <img 
                 src={currentData.image} 
                 alt="Playlist cover" 
@@ -211,7 +211,7 @@ export const PlaylistDisplay = ({ timeOfDay, mood, isSpotifyConnected }: Playlis
 
         <button className="w-full mb-6 bg-green-500 hover:bg-green-600 text-white font-semibold py-4 px-8 rounded-full transition-colors duration-200 flex items-center justify-center gap-3">
           <Play className="w-6 h-6 fill-current" />
-          {isSpotifyConnected && currentData.spotifyUrl ? (
+          {isSpotifyConnected && ('spotifyUrl' in currentData) && currentData.spotifyUrl ? (
             <>
               Play on Spotify
               <ExternalLink className="w-4 h-4" />
