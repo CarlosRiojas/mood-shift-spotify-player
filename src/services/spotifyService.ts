@@ -87,21 +87,45 @@ class SpotifyService {
   }
 
   generateAuthUrl(clientId: string, redirectUri: string): string {
-    const scope = 'playlist-read-private playlist-read-collaborative';
+    const scope = 'playlist-read-private playlist-read-collaborative user-read-private';
+    const state = Math.random().toString(36).substring(7);
+    
+    // Store state for verification
+    localStorage.setItem('spotify_auth_state', state);
+    
     const params = new URLSearchParams({
-      response_type: 'token',
+      response_type: 'code',
       client_id: clientId,
       scope,
       redirect_uri: redirectUri,
+      state: state,
+      show_dialog: 'true'
     });
 
     return `https://accounts.spotify.com/authorize?${params.toString()}`;
   }
 
-  extractTokenFromUrl(): string | null {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    return params.get('access_token');
+  extractCodeFromUrl(): string | null {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const storedState = localStorage.getItem('spotify_auth_state');
+    
+    if (state && storedState && state === storedState) {
+      localStorage.removeItem('spotify_auth_state');
+      return code;
+    }
+    
+    return null;
+  }
+
+  // Note: This would normally require a backend to exchange code for token
+  // For demo purposes, we'll show instructions for manual token input
+  async exchangeCodeForToken(code: string, clientId: string, redirectUri: string): Promise<string | null> {
+    // This would normally be done on the backend for security
+    console.log('Authorization code received:', code);
+    console.log('You would normally exchange this on your backend for an access token');
+    return null;
   }
 }
 

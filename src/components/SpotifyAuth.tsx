@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { spotifyService, SpotifyCredentials } from '@/services/spotifyService';
 import { Input } from '@/components/ui/input';
-import { Music, LogOut, ExternalLink } from 'lucide-react';
+import { Music, LogOut, ExternalLink, AlertCircle } from 'lucide-react';
 
 interface SpotifyAuthProps {
   onAuthChange: (isAuthenticated: boolean) => void;
@@ -11,8 +11,9 @@ interface SpotifyAuthProps {
 export const SpotifyAuth = ({ onAuthChange }: SpotifyAuthProps) => {
   const [credentials, setCredentials] = useState<SpotifyCredentials | null>(null);
   const [clientId, setClientId] = useState('');
-  const [showManualInput, setShowManualInput] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(true);
   const [manualToken, setManualToken] = useState('');
+  const [authCode, setAuthCode] = useState<string | null>(null);
 
   useEffect(() => {
     // Check for existing credentials
@@ -22,18 +23,14 @@ export const SpotifyAuth = ({ onAuthChange }: SpotifyAuthProps) => {
       onAuthChange(true);
     }
 
-    // Check for token in URL (from OAuth redirect)
-    const token = spotifyService.extractTokenFromUrl();
-    if (token && clientId) {
-      const newCredentials = { clientId, accessToken: token };
-      spotifyService.setCredentials(newCredentials);
-      setCredentials(newCredentials);
-      onAuthChange(true);
-      
+    // Check for authorization code in URL
+    const code = spotifyService.extractCodeFromUrl();
+    if (code) {
+      setAuthCode(code);
       // Clean up URL
-      window.location.hash = '';
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [clientId, onAuthChange]);
+  }, [onAuthChange]);
 
   const handleOAuthLogin = () => {
     if (!clientId.trim()) {
@@ -63,6 +60,7 @@ export const SpotifyAuth = ({ onAuthChange }: SpotifyAuthProps) => {
     setCredentials(null);
     setClientId('');
     setManualToken('');
+    setAuthCode(null);
     onAuthChange(false);
   };
 
@@ -93,6 +91,26 @@ export const SpotifyAuth = ({ onAuthChange }: SpotifyAuthProps) => {
         Connect to Spotify
       </h3>
       
+      {authCode && (
+        <div className="mb-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
+            <div className="text-white">
+              <p className="font-medium mb-2">Authorization Code Received!</p>
+              <p className="text-sm text-white/80 mb-3">
+                For security reasons, exchanging the authorization code for an access token requires a backend server. 
+                For this demo, please get your access token manually:
+              </p>
+              <ol className="text-sm text-white/80 space-y-1 ml-4">
+                <li>1. Go to <a href="https://developer.spotify.com/console/get-playlists/" target="_blank" rel="noopener noreferrer" className="text-blue-300 underline">Spotify Web API Console</a></li>
+                <li>2. Click "Get Token" and authorize</li>
+                <li>3. Copy the access token and paste it below</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="space-y-4">
         <div>
           <label className="block text-white/80 text-sm mb-2">
@@ -111,45 +129,39 @@ export const SpotifyAuth = ({ onAuthChange }: SpotifyAuthProps) => {
           <button
             onClick={handleOAuthLogin}
             className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+            disabled={!clientId.trim()}
           >
             <ExternalLink className="w-4 h-4" />
             Authorize with Spotify
           </button>
+        </div>
+
+        <div className="space-y-3 pt-4 border-t border-white/20">
+          <div>
+            <label className="block text-white/80 text-sm mb-2">
+              Access Token (Manual Input)
+            </label>
+            <Input
+              type="text"
+              value={manualToken}
+              onChange={(e) => setManualToken(e.target.value)}
+              placeholder="Paste your access token here"
+              className="bg-white/10 border-white/20 text-white placeholder-white/50"
+            />
+          </div>
           <button
-            onClick={() => setShowManualInput(!showManualInput)}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-md transition-colors"
+            onClick={handleManualLogin}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition-colors"
           >
-            Manual
+            Connect with Token
           </button>
         </div>
 
-        {showManualInput && (
-          <div className="space-y-3 pt-4 border-t border-white/20">
-            <div>
-              <label className="block text-white/80 text-sm mb-2">
-                Access Token
-              </label>
-              <Input
-                type="text"
-                value={manualToken}
-                onChange={(e) => setManualToken(e.target.value)}
-                placeholder="Paste your access token here"
-                className="bg-white/10 border-white/20 text-white placeholder-white/50"
-              />
-            </div>
-            <button
-              onClick={handleManualLogin}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition-colors"
-            >
-              Connect Manually
-            </button>
-          </div>
-        )}
-
         <div className="text-xs text-white/60 space-y-1">
-          <p>• Create a Spotify app at developer.spotify.com</p>
-          <p>• Add this URL as redirect URI: {window.location.origin}{window.location.pathname}</p>
-          <p>• Get your Client ID from the app dashboard</p>
+          <p><strong>Setup Instructions:</strong></p>
+          <p>• Create a Spotify app at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-300 underline">developer.spotify.com</a></p>
+          <p>• Add this URL as redirect URI: <code className="bg-white/10 px-1 rounded">{window.location.origin}{window.location.pathname}</code></p>
+          <p>• For quick testing, get a token from the <a href="https://developer.spotify.com/console/get-playlists/" target="_blank" rel="noopener noreferrer" className="text-blue-300 underline">Web API Console</a></p>
         </div>
       </div>
     </div>
