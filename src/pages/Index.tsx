@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { TimeSelector } from '@/components/TimeSelector';
 import { MoodSelector } from '@/components/MoodSelector';
 import { PlaylistDisplay } from '@/components/PlaylistDisplay';
+import { SpotifyAuth } from '@/components/SpotifyAuth';
 import { Header } from '@/components/Header';
 
 export type TimeOfDay = 'morning' | 'afternoon' | 'night';
@@ -11,6 +12,7 @@ export type Mood = 'sad' | 'optimistic' | 'happy';
 const Index = () => {
   const [selectedTime, setSelectedTime] = useState<TimeOfDay>('morning');
   const [selectedMood, setSelectedMood] = useState<Mood>('optimistic');
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
 
   const getBackgroundGradient = () => {
     const timeGradients = {
@@ -27,6 +29,8 @@ const Index = () => {
         <Header />
         
         <div className="mt-12 space-y-8">
+          <SpotifyAuth onAuthChange={setIsSpotifyConnected} />
+          
           <TimeSelector 
             selectedTime={selectedTime} 
             onTimeSelect={setSelectedTime} 
@@ -41,6 +45,7 @@ const Index = () => {
           <PlaylistDisplay 
             timeOfDay={selectedTime}
             mood={selectedMood}
+            isSpotifyConnected={isSpotifyConnected}
           />
         </div>
       </div>

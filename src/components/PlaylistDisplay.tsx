@@ -1,14 +1,21 @@
 
-import { Play, Heart, MoreHorizontal, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Play, Heart, MoreHorizontal, Clock, ExternalLink } from 'lucide-react';
 import { TimeOfDay, Mood } from '@/pages/Index';
+import { spotifyService, SpotifyPlaylist, SpotifyTrack } from '@/services/spotifyService';
 
 interface PlaylistDisplayProps {
   timeOfDay: TimeOfDay;
   mood: Mood;
+  isSpotifyConnected: boolean;
 }
 
-export const PlaylistDisplay = ({ timeOfDay, mood }: PlaylistDisplayProps) => {
-  // Mock playlist data - this will be replaced with Spotify API data
+export const PlaylistDisplay = ({ timeOfDay, mood, isSpotifyConnected }: PlaylistDisplayProps) => {
+  const [playlist, setPlaylist] = useState<SpotifyPlaylist | null>(null);
+  const [tracks, setTracks] = useState<SpotifyTrack[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Mock playlist data for when Spotify is not connected
   const mockPlaylists = {
     morning: {
       sad: {
@@ -72,7 +79,53 @@ export const PlaylistDisplay = ({ timeOfDay, mood }: PlaylistDisplayProps) => {
     }
   };
 
-  const currentPlaylist = mockPlaylists[timeOfDay][mood];
+  useEffect(() => {
+    if (isSpotifyConnected) {
+      searchForPlaylist();
+    }
+  }, [timeOfDay, mood, isSpotifyConnected]);
+
+  const searchForPlaylist = async () => {
+    setLoading(true);
+    try {
+      const searchQuery = getSearchQuery(timeOfDay, mood);
+      const playlists = await spotifyService.searchPlaylists(searchQuery);
+      
+      if (playlists.length > 0) {
+        const selectedPlaylist = playlists[0];
+        setPlaylist(selectedPlaylist);
+        
+        // Fetch tracks for the playlist
+        const playlistTracks = await spotifyService.getPlaylistTracks(selectedPlaylist.id);
+        setTracks(playlistTracks);
+      }
+    } catch (error) {
+      console.error('Error fetching playlist:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getSearchQuery = (time: TimeOfDay, mood: Mood): string => {
+    const queries = {
+      morning: {
+        sad: 'morning sad acoustic chill',
+        optimistic: 'morning motivation uplifting',
+        happy: 'morning energy happy upbeat'
+      },
+      afternoon: {
+        sad: 'afternoon melancholy contemplative',
+        optimistic: 'afternoon motivation focus',
+        happy: 'afternoon happy sunshine'
+      },
+      night: {
+        sad: 'evening night sad peaceful',
+        optimistic: 'night hopeful relaxing',
+        happy: 'night celebration party'
+      }
+    };
+    return queries[time][mood];
+  };
 
   const getPlaylistGradient = () => {
     const gradients = {
@@ -95,24 +148,53 @@ export const PlaylistDisplay = ({ timeOfDay, mood }: PlaylistDisplayProps) => {
     return gradients[timeOfDay][mood];
   };
 
+  const currentData = isSpotifyConnected && playlist ? {
+    name: playlist.name,
+    description: playlist.description || 'Spotify playlist',
+    tracks: tracks.map(track => `${track.name} - ${track.artists.map(a => a.name).join(', ')}`),
+    duration: `${tracks.length} tracks`,
+    spotifyUrl: playlist.external_urls.spotify,
+    image: playlist.images[0]?.url
+  } : mockPlaylists[timeOfDay][mood];
+
+  if (loading && isSpotifyConnected) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className={`bg-gradient-to-br ${getPlaylistGradient()} backdrop-blur-sm rounded-3xl p-8 border border-white/20`}>
+          <div className="text-center text-white">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <p>Finding the perfect playlist for your mood...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className={`bg-gradient-to-br ${getPlaylistGradient()} backdrop-blur-sm rounded-3xl p-8 border border-white/20`}>
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
+            {currentData.image && (
+              <img 
+                src={currentData.image} 
+                alt="Playlist cover" 
+                className="w-16 h-16 rounded-lg mb-4 object-cover"
+              />
+            )}
             <h3 className="text-2xl font-bold text-white mb-2">
-              {currentPlaylist.name}
+              {currentData.name}
             </h3>
             <p className="text-white/70 mb-4">
-              {currentPlaylist.description}
+              {currentData.description}
             </p>
             <div className="flex items-center gap-4 text-white/60 text-sm">
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                {currentPlaylist.duration}
+                {currentData.duration}
               </div>
               <div className="flex items-center gap-1">
-                {currentPlaylist.tracks.length} tracks
+                {currentData.tracks.length} tracks
               </div>
             </div>
           </div>
@@ -129,12 +211,19 @@ export const PlaylistDisplay = ({ timeOfDay, mood }: PlaylistDisplayProps) => {
 
         <button className="w-full mb-6 bg-green-500 hover:bg-green-600 text-white font-semibold py-4 px-8 rounded-full transition-colors duration-200 flex items-center justify-center gap-3">
           <Play className="w-6 h-6 fill-current" />
-          Play on Spotify
+          {isSpotifyConnected && currentData.spotifyUrl ? (
+            <>
+              Play on Spotify
+              <ExternalLink className="w-4 h-4" />
+            </>
+          ) : (
+            'Play on Spotify'
+          )}
         </button>
 
         <div className="space-y-3">
           <h4 className="text-white font-semibold mb-3">Featured Tracks:</h4>
-          {currentPlaylist.tracks.map((track, index) => (
+          {currentData.tracks.slice(0, 5).map((track, index) => (
             <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
               <div className="w-8 h-8 rounded bg-white/20 flex items-center justify-center text-white/70 text-sm font-medium">
                 {index + 1}
@@ -149,7 +238,15 @@ export const PlaylistDisplay = ({ timeOfDay, mood }: PlaylistDisplayProps) => {
 
         <div className="mt-6 p-4 rounded-lg bg-white/5 border border-white/10">
           <p className="text-white/60 text-sm text-center">
-            <strong>Coming Soon:</strong> Real-time Spotify integration to automatically refresh playlists based on your mood and listening patterns.
+            {isSpotifyConnected ? (
+              <>
+                <strong>Live Spotify Integration:</strong> Real playlists refreshed based on your mood and time of day.
+              </>
+            ) : (
+              <>
+                <strong>Demo Mode:</strong> Connect to Spotify above to get real playlists tailored to your mood.
+              </>
+            )}
           </p>
         </div>
       </div>
