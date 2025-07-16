@@ -1,20 +1,26 @@
-
-import { Music } from 'lucide-react';
+import React from 'react';
+import { useAuth } from './SpotifyAuth'; // Import the hook to access context
 
 export const Header = () => {
+  // Use the hook to get the token and the logout function from the context
+  const { token, logout } = useAuth();
+
   return (
-    <header className="text-center">
-      <div className="flex items-center justify-center gap-3 mb-4">
-        <div className="p-3 bg-white/20 backdrop-blur-sm rounded-full">
-          <Music className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-white">
-          Spotify Moods
-        </h1>
+    <header className="flex justify-between items-center mb-8">
+      <div>
+        <h1 className="text-4xl font-bold text-white">Spotify Moods</h1>
+        <p className="text-white/70">Find the perfect soundtrack for your moment.</p>
       </div>
-      <p className="text-white/80 text-lg max-w-2xl mx-auto leading-relaxed">
-        Your personal soundtrack curator. Discover playlists that match your time of day and emotional state for a better daily rhythm.
-      </p>
+      
+      {/* Conditionally render the logout button only if a token exists */}
+      {token && (
+        <button
+          onClick={logout}
+          className="bg-red-600 text-white font-bold py-2 px-6 rounded-full hover:bg-red-700 transition duration-300"
+        >
+          Logout
+        </button>
+      )}
     </header>
   );
 };

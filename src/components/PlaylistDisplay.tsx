@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Pause, Heart, MoreHorizontal, Clock, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Heart, MoreHorizontal, Clock, AlertTriangle } from 'lucide-react';
 import { TimeOfDay, Mood } from '@/pages/Index';
 import { spotifyService, SpotifyTrack } from '@/services/spotifyService';
 import { isAxiosError } from 'axios';
@@ -28,11 +28,10 @@ const getPlaylistGradient = (timeOfDay: TimeOfDay, mood: Mood): string => {
 interface PlaylistDisplayProps {
   timeOfDay: TimeOfDay;
   mood: Mood;
-  onAuthError: () => void;
 }
 
-export const PlaylistDisplay = ({ timeOfDay, mood, onAuthError }: PlaylistDisplayProps) => {
-  const { token, deviceId } = useAuth();
+export const PlaylistDisplay = ({ timeOfDay, mood }: PlaylistDisplayProps) => {
+  const { token, deviceId, logout } = useAuth();
   const [tracks, setTracks] = useState<SpotifyTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +61,7 @@ export const PlaylistDisplay = ({ timeOfDay, mood, onAuthError }: PlaylistDispla
       if (isAxiosError(err) && err.response) {
         if (err.response.status === 401 || err.response.status === 403) {
           detailedError = "Your session has expired. Please log in again.";
-          onAuthError();
+          logout(); // Call the logout function from context
         } else if (err.response.data?.error?.message) {
           detailedError = `Spotify API Error: ${err.response.data.error.message}`;
         }
@@ -72,7 +71,7 @@ export const PlaylistDisplay = ({ timeOfDay, mood, onAuthError }: PlaylistDispla
     } finally {
       setLoading(false);
     }
-  }, [token, timeOfDay, mood, onAuthError]);
+  }, [token, timeOfDay, mood, logout]);
 
   useEffect(() => {
     if (token) {
@@ -80,24 +79,38 @@ export const PlaylistDisplay = ({ timeOfDay, mood, onAuthError }: PlaylistDispla
     }
   }, [token, searchForTracks]);
 
-  const playTrack = async (trackIndex: number) => {
-    if (!token || !deviceId || !tracks[trackIndex]) {
+  const handlePlayPause = async (trackIndex: number) => {
+    if (!token || !deviceId) {
       setError("Spotify player not ready. Please ensure Spotify is active on a device.");
       return;
     }
-    
-    currentTrackIndexRef.current = trackIndex;
-    const track = tracks[trackIndex];
-    
-    try {
-      await spotifyService.playTracks(token, deviceId, [track.uri]);
-      setCurrentTrack(track);
+
+    const trackToPlay = tracks[trackIndex];
+
+    if (isPlaying && currentTrack?.id === trackToPlay.id) {
+      await spotifyService.pausePlayback(token, deviceId);
+      setIsPlaying(false);
+    } else {
+      await spotifyService.playTracks(token, deviceId, [trackToPlay.uri]);
+      setCurrentTrack(trackToPlay);
       setIsPlaying(true);
-    } catch (error) {
-      console.error("Error playing track:", error);
-      setError("Could not play track.");
+      currentTrackIndexRef.current = trackIndex;
     }
   };
+
+  // Autoplay logic
+  useEffect(() => {
+    let autoplayTimeout: NodeJS.Timeout;
+    if (isPlaying && isAutoplay && currentTrack) {
+        // A simple timeout to simulate the end of a track
+        autoplayTimeout = setTimeout(() => {
+            const nextTrackIndex = (currentTrackIndexRef.current + 1) % tracks.length;
+            handlePlayPause(nextTrackIndex);
+        }, currentTrack.duration_ms + 1000); // Add a 1s buffer
+    }
+    return () => clearTimeout(autoplayTimeout);
+  }, [isPlaying, isAutoplay, currentTrack, tracks, handlePlayPause]);
+
 
   if (loading) {
     return (
@@ -157,7 +170,7 @@ export const PlaylistDisplay = ({ timeOfDay, mood, onAuthError }: PlaylistDispla
                 <p className="text-white/90 truncate">{track.name}</p>
                 <p className="text-white/60 text-sm truncate">{track.artists.map(a => a.name).join(', ')}</p>
               </div>
-              <button onClick={() => playTrack(index)} className="p-2 rounded-full hover:bg-white/20 transition-colors">
+              <button onClick={() => handlePlayPause(index)} className="p-2 rounded-full hover:bg-white/20 transition-colors">
                 {currentTrack?.id === track.id && isPlaying ? <Pause className="w-5 h-5 text-white" /> : <Play className="w-5 h-5 text-white" />}
               </button>
             </div>

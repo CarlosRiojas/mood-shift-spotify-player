@@ -2,31 +2,24 @@ import React, { useState, useEffect, useCallback, useContext, createContext } fr
 import axios from 'axios';
 
 // --- Auth Context Setup ---
-// This section defines the data that our authentication context will hold.
+// The AuthContextType interface now correctly includes the 'logout' function.
 interface AuthContextType {
   token: string | null;
-  deviceId: string | null; // The ID of the web player instance
+  deviceId: string | null;
+  logout: () => void;
 }
 
-// We create the context here. It will be used to provide the token and deviceId to child components.
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/**
- * This is the custom hook that your other components (like PlaylistDisplay) will use.
- * It provides a simple way to access the token and deviceId from anywhere inside the SpotifyAuth wrapper.
- * It is now correctly exported from this file.
- */
 export const useAuth = () => {
     const context = useContext(AuthContext);
     if (!context) {
-        // This error will be thrown if you try to use this hook outside of the SpotifyAuth component.
         throw new Error("useAuth must be used within a SpotifyAuth provider");
     }
     return context;
 };
 
-
-// --- Constants ---
+// --- Constants & Helpers ---
 const CLIENT_ID = "cb8e977a112143c48a31e2834559bd1b"; 
 const REDIRECT_URI = "http://127.0.0.1:8088";
 const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
@@ -36,12 +29,11 @@ const SCOPES = [
     "user-read-email", 
     "user-top-read", 
     "playlist-read-private",
-    "streaming", // Required for the Web Playback SDK
-    "user-read-playback-state", // Required for the Web Playback SDK
-    "user-modify-playback-state" // Required for the Web Playback SDK
+    "streaming",
+    "user-read-playback-state",
+    "user-modify-playback-state"
 ];
 
-// --- PKCE Helper Functions ---
 const generateCodeVerifier = (length: number) => {
     let text = '';
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -60,16 +52,11 @@ const generateCodeChallenge = async (codeVerifier: string) => {
         .replace(/=+$/, '');
 };
 
-
 // --- Auth Guard Component ---
 interface SpotifyAuthProps {
   children: React.ReactNode;
 }
 
-/**
- * This is the main component that handles the entire authentication flow and SDK initialization.
- * It is now correctly exported as a named function component.
- */
 export function SpotifyAuth({ children }: SpotifyAuthProps) {
     const [token, setToken] = useState<string | null>(null);
     const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -82,7 +69,6 @@ export function SpotifyAuth({ children }: SpotifyAuthProps) {
             setLoading(false);
             return;
         }
-
         try {
             const params = new URLSearchParams();
             params.append("client_id", CLIENT_ID);
@@ -100,11 +86,17 @@ export function SpotifyAuth({ children }: SpotifyAuthProps) {
         }
     }, []);
 
+    const logout = useCallback(() => {
+        setToken(null);
+        setDeviceId(null);
+        window.localStorage.removeItem("spotify_token");
+        console.log("User logged out, token cleared.");
+    }, []);
+
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         const storedToken = window.localStorage.getItem("spotify_token");
-
         if (code) {
             getAccessToken(code);
         } else if (storedToken) {
@@ -116,11 +108,10 @@ export function SpotifyAuth({ children }: SpotifyAuthProps) {
 
     useEffect(() => {
         if (!token) {
-            if (!loading) setLoading(false);
+            if (loading) setLoading(false);
             return;
         };
 
-        // Initialize the Spotify Player SDK
         const playerScript = document.getElementById('spotify-player-script');
         if (!playerScript) {
             const script = document.createElement("script");
@@ -136,25 +127,21 @@ export function SpotifyAuth({ children }: SpotifyAuthProps) {
                 getOAuthToken: cb => { cb(token); },
                 volume: 0.5
             });
-
             player.addListener('ready', ({ device_id }) => {
                 console.log('Spotify Player is ready with Device ID', device_id);
                 setDeviceId(device_id);
-                setLoading(false); // Stop loading once the player is ready
+                setLoading(false);
             });
-
             player.addListener('not_ready', ({ device_id }) => {
                 console.log('Device ID has gone offline', device_id);
                 setDeviceId(null);
             });
-            
-            player.addListener('initialization_error', ({ message }) => { console.error('Failed to initialize', message); setLoading(false); });
-            player.addListener('authentication_error', ({ message }) => { console.error('Failed to authenticate', message); setLoading(false); });
+            player.addListener('initialization_error', ({ message }) => { console.error('Failed to initialize', message); setLoading(false); logout(); });
+            player.addListener('authentication_error', ({ message }) => { console.error('Failed to authenticate', message); setLoading(false); logout(); });
             player.addListener('account_error', ({ message }) => { console.error('Account error', message); setLoading(false); });
-
             player.connect();
         };
-    }, [token, loading]);
+    }, [token, loading, logout]);
 
     const redirectToSpotify = async () => {
         const verifier = generateCodeVerifier(128);
@@ -185,8 +172,9 @@ export function SpotifyAuth({ children }: SpotifyAuthProps) {
         );
     }
 
+    // The provider's value now correctly matches the AuthContextType interface.
     return (
-        <AuthContext.Provider value={{ token, deviceId }}>
+        <AuthContext.Provider value={{ token, deviceId, logout }}>
             {children}
         </AuthContext.Provider>
     );
