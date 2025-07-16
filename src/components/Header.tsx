@@ -9,7 +9,7 @@ export const Header = () => {
           <Music className="w-8 h-8 text-white" />
         </div>
         <h1 className="text-4xl md:text-5xl font-bold text-white">
-          MoodFlow
+          Spotify Moods
         </h1>
       </div>
       <p className="text-white/80 text-lg max-w-2xl mx-auto leading-relaxed">

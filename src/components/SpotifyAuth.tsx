@@ -1,169 +1,193 @@
+import React, { useState, useEffect, useCallback, useContext, createContext } from 'react';
+import axios from 'axios';
 
-import { useState, useEffect } from 'react';
-import { spotifyService, SpotifyCredentials } from '@/services/spotifyService';
-import { Input } from '@/components/ui/input';
-import { Music, LogOut, ExternalLink, AlertCircle } from 'lucide-react';
-
-interface SpotifyAuthProps {
-  onAuthChange: (isAuthenticated: boolean) => void;
+// --- Auth Context Setup ---
+// This section defines the data that our authentication context will hold.
+interface AuthContextType {
+  token: string | null;
+  deviceId: string | null; // The ID of the web player instance
 }
 
-export const SpotifyAuth = ({ onAuthChange }: SpotifyAuthProps) => {
-  const [credentials, setCredentials] = useState<SpotifyCredentials | null>(null);
-  const [clientId, setClientId] = useState('');
-  const [showManualInput, setShowManualInput] = useState(true);
-  const [manualToken, setManualToken] = useState('');
-  const [authCode, setAuthCode] = useState<string | null>(null);
+// We create the context here. It will be used to provide the token and deviceId to child components.
+const AuthContext = createContext<AuthContextType | null>(null);
 
-  useEffect(() => {
-    // Check for existing credentials
-    const existingCredentials = spotifyService.getCredentials();
-    if (existingCredentials) {
-      setCredentials(existingCredentials);
-      onAuthChange(true);
+/**
+ * This is the custom hook that your other components (like PlaylistDisplay) will use.
+ * It provides a simple way to access the token and deviceId from anywhere inside the SpotifyAuth wrapper.
+ * It is now correctly exported from this file.
+ */
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        // This error will be thrown if you try to use this hook outside of the SpotifyAuth component.
+        throw new Error("useAuth must be used within a SpotifyAuth provider");
     }
-
-    // Check for authorization code in URL
-    const code = spotifyService.extractCodeFromUrl();
-    if (code) {
-      setAuthCode(code);
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [onAuthChange]);
-
-  const handleOAuthLogin = () => {
-    if (!clientId.trim()) {
-      alert('Please enter your Spotify Client ID first');
-      return;
-    }
-
-    const redirectUri = window.location.origin + window.location.pathname;
-    const authUrl = spotifyService.generateAuthUrl(clientId, redirectUri);
-    window.location.href = authUrl;
-  };
-
-  const handleManualLogin = () => {
-    if (!clientId.trim() || !manualToken.trim()) {
-      alert('Please enter both Client ID and Access Token');
-      return;
-    }
-
-    const newCredentials = { clientId, accessToken: manualToken };
-    spotifyService.setCredentials(newCredentials);
-    setCredentials(newCredentials);
-    onAuthChange(true);
-  };
-
-  const handleLogout = () => {
-    spotifyService.clearCredentials();
-    setCredentials(null);
-    setClientId('');
-    setManualToken('');
-    setAuthCode(null);
-    onAuthChange(false);
-  };
-
-  if (credentials) {
-    return (
-      <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Music className="w-5 h-5 text-green-400" />
-            <span className="text-white font-medium">Connected to Spotify</span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded-md transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Disconnect
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 mb-6">
-      <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-        <Music className="w-5 h-5" />
-        Connect to Spotify
-      </h3>
-      
-      {authCode && (
-        <div className="mb-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
-            <div className="text-white">
-              <p className="font-medium mb-2">Authorization Code Received!</p>
-              <p className="text-sm text-white/80 mb-3">
-                For security reasons, exchanging the authorization code for an access token requires a backend server. 
-                For this demo, please get your access token manually:
-              </p>
-              <ol className="text-sm text-white/80 space-y-1 ml-4">
-                <li>1. Go to <a href="https://developer.spotify.com/console/get-playlists/" target="_blank" rel="noopener noreferrer" className="text-blue-300 underline">Spotify Web API Console</a></li>
-                <li>2. Click "Get Token" and authorize</li>
-                <li>3. Copy the access token and paste it below</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-white/80 text-sm mb-2">
-            Spotify Client ID
-          </label>
-          <Input
-            type="text"
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            placeholder="Enter your Spotify app Client ID"
-            className="bg-white/10 border-white/20 text-white placeholder-white/50"
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={handleOAuthLogin}
-            className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
-            disabled={!clientId.trim()}
-          >
-            <ExternalLink className="w-4 h-4" />
-            Authorize with Spotify
-          </button>
-        </div>
-
-        <div className="space-y-3 pt-4 border-t border-white/20">
-          <div>
-            <label className="block text-white/80 text-sm mb-2">
-              Access Token (Manual Input)
-            </label>
-            <Input
-              type="text"
-              value={manualToken}
-              onChange={(e) => setManualToken(e.target.value)}
-              placeholder="Paste your access token here"
-              className="bg-white/10 border-white/20 text-white placeholder-white/50"
-            />
-          </div>
-          <button
-            onClick={handleManualLogin}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition-colors"
-          >
-            Connect with Token
-          </button>
-        </div>
-
-        <div className="text-xs text-white/60 space-y-1">
-          <p><strong>Setup Instructions:</strong></p>
-          <p>• Create a Spotify app at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-300 underline">developer.spotify.com</a></p>
-          <p>• Add this URL as redirect URI: <code className="bg-white/10 px-1 rounded">{window.location.origin}{window.location.pathname}</code></p>
-          <p>• For quick testing, get a token from the <a href="https://developer.spotify.com/console/get-playlists/" target="_blank" rel="noopener noreferrer" className="text-blue-300 underline">Web API Console</a></p>
-        </div>
-      </div>
-    </div>
-  );
+    return context;
 };
+
+
+// --- Constants ---
+const CLIENT_ID = "cb8e977a112143c48a31e2834559bd1b"; 
+const REDIRECT_URI = "http://127.0.0.1:8088";
+const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
+const SCOPES = [
+    "user-read-private", 
+    "user-read-email", 
+    "user-top-read", 
+    "playlist-read-private",
+    "streaming", // Required for the Web Playback SDK
+    "user-read-playback-state", // Required for the Web Playback SDK
+    "user-modify-playback-state" // Required for the Web Playback SDK
+];
+
+// --- PKCE Helper Functions ---
+const generateCodeVerifier = (length: number) => {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < length; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+};
+
+const generateCodeChallenge = async (codeVerifier: string) => {
+    const data = new TextEncoder().encode(codeVerifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode.apply(null, [...new Uint8Array(digest)]))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+};
+
+
+// --- Auth Guard Component ---
+interface SpotifyAuthProps {
+  children: React.ReactNode;
+}
+
+/**
+ * This is the main component that handles the entire authentication flow and SDK initialization.
+ * It is now correctly exported as a named function component.
+ */
+export function SpotifyAuth({ children }: SpotifyAuthProps) {
+    const [token, setToken] = useState<string | null>(null);
+    const [deviceId, setDeviceId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    const getAccessToken = useCallback(async (code: string) => {
+        const verifier = localStorage.getItem("verifier");
+        if (!verifier) {
+            console.error("Code verifier not found.");
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const params = new URLSearchParams();
+            params.append("client_id", CLIENT_ID);
+            params.append("grant_type", "authorization_code");
+            params.append("code", code);
+            params.append("redirect_uri", REDIRECT_URI);
+            params.append("code_verifier", verifier);
+            const result = await axios.post(TOKEN_ENDPOINT, params, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+            window.localStorage.setItem("spotify_token", result.data.access_token);
+            setToken(result.data.access_token);
+        } catch (error) {
+            console.error("Error fetching access token:", error);
+        } finally {
+            window.history.pushState({}, '', REDIRECT_URI);
+        }
+    }, []);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const storedToken = window.localStorage.getItem("spotify_token");
+
+        if (code) {
+            getAccessToken(code);
+        } else if (storedToken) {
+            setToken(storedToken);
+        } else {
+            setLoading(false);
+        }
+    }, [getAccessToken]);
+
+    useEffect(() => {
+        if (!token) {
+            if (!loading) setLoading(false);
+            return;
+        };
+
+        // Initialize the Spotify Player SDK
+        const playerScript = document.getElementById('spotify-player-script');
+        if (!playerScript) {
+            const script = document.createElement("script");
+            script.id = 'spotify-player-script';
+            script.src = "https://sdk.scdn.co/spotify-player.js";
+            script.async = true;
+            document.body.appendChild(script);
+        }
+
+        window.onSpotifyWebPlaybackSDKReady = () => {
+            const player = new window.Spotify.Player({
+                name: 'Mood Shift Player',
+                getOAuthToken: cb => { cb(token); },
+                volume: 0.5
+            });
+
+            player.addListener('ready', ({ device_id }) => {
+                console.log('Spotify Player is ready with Device ID', device_id);
+                setDeviceId(device_id);
+                setLoading(false); // Stop loading once the player is ready
+            });
+
+            player.addListener('not_ready', ({ device_id }) => {
+                console.log('Device ID has gone offline', device_id);
+                setDeviceId(null);
+            });
+            
+            player.addListener('initialization_error', ({ message }) => { console.error('Failed to initialize', message); setLoading(false); });
+            player.addListener('authentication_error', ({ message }) => { console.error('Failed to authenticate', message); setLoading(false); });
+            player.addListener('account_error', ({ message }) => { console.error('Account error', message); setLoading(false); });
+
+            player.connect();
+        };
+    }, [token, loading]);
+
+    const redirectToSpotify = async () => {
+        const verifier = generateCodeVerifier(128);
+        const challenge = await generateCodeChallenge(verifier);
+        localStorage.setItem("verifier", verifier);
+        const params = new URLSearchParams();
+        params.append("client_id", CLIENT_ID);
+        params.append("response_type", "code");
+        params.append("redirect_uri", REDIRECT_URI);
+        params.append("scope", SCOPES.join(' '));
+        params.append("code_challenge_method", "S256");
+        params.append("code_challenge", challenge);
+        document.location = `${AUTH_ENDPOINT}?${params.toString()}`;
+    };
+
+    if (loading) {
+        return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center"><p>Loading Spotify Player...</p></div>;
+    }
+
+    if (!token) {
+        return (
+            <div className="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4 font-sans">
+                <div className="w-full max-w-md mx-auto text-center">
+                    <header className="mb-8"><h1 className="text-4xl md:text-5xl font-bold text-green-500 mb-2">Mood Shift</h1><p className="text-gray-400">Your Spotify, Your Vibe.</p></header>
+                    <button onClick={redirectToSpotify} className="bg-green-500 text-white font-bold py-3 px-8 rounded-full hover:bg-green-600 transition duration-300 ease-in-out transform hover:scale-105">Login with Spotify</button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <AuthContext.Provider value={{ token, deviceId }}>
+            {children}
+        </AuthContext.Provider>
+    );
+}

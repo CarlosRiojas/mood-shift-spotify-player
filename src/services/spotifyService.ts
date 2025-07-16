@@ -1,133 +1,93 @@
+import axios from 'axios';
 
-interface SpotifyCredentials {
-  clientId: string;
-  accessToken: string;
+const API_BASE_URL = 'https://api.spotify.com/v1';
+
+// --- Type Definitions ---
+// Note the addition of the 'uri' property to SpotifyTrack, which is essential for playback.
+export interface SpotifyImage { url: string; }
+export interface SpotifyArtist { name: string; }
+export interface SpotifyTrack { 
+  id: string; 
+  name: string; 
+  artists: SpotifyArtist[]; 
+  uri: string; 
+  duration_ms: number; 
 }
-
-interface SpotifyPlaylist {
+export interface SpotifyPlaylist {
   id: string;
   name: string;
-  description: string;
-  tracks: {
-    total: number;
-  };
-  images: Array<{
-    url: string;
-  }>;
+  description: string | null;
+  images: SpotifyImage[];
   external_urls: {
     spotify: string;
   };
 }
 
-interface SpotifyTrack {
-  name: string;
-  artists: Array<{ name: string }>;
-  id: string;
-}
 
-class SpotifyService {
-  private credentials: SpotifyCredentials | null = null;
+// --- API Client ---
+/**
+ * Creates a reusable Axios instance with the necessary auth header.
+ * @param token The Spotify access token.
+ * @returns An Axios instance configured with the authentication header.
+ */
+const getApiClient = (token: string) => {
+  return axios.create({
+    baseURL: API_BASE_URL,
+    headers: { 
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+};
 
-  setCredentials(credentials: SpotifyCredentials) {
-    this.credentials = credentials;
-    localStorage.setItem('spotify_credentials', JSON.stringify(credentials));
-  }
+// --- Service Functions ---
 
-  getCredentials(): SpotifyCredentials | null {
-    if (this.credentials) return this.credentials;
-    
-    const stored = localStorage.getItem('spotify_credentials');
-    if (stored) {
-      this.credentials = JSON.parse(stored);
-      return this.credentials;
-    }
-    
-    return null;
-  }
-
-  clearCredentials() {
-    this.credentials = null;
-    localStorage.removeItem('spotify_credentials');
-  }
-
-  async searchPlaylists(query: string): Promise<SpotifyPlaylist[]> {
-    const credentials = this.getCredentials();
-    if (!credentials) throw new Error('No credentials available');
-
-    const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=playlist&limit=10`, {
-      headers: {
-        'Authorization': `Bearer ${credentials.accessToken}`,
-      },
+/**
+ * Searches for tracks on Spotify based on a query.
+ * @param query The search query string.
+ * @param token The user's access token.
+ * @returns A promise that resolves to an array of tracks.
+ */
+const searchTracks = async (query: string, token: string): Promise<SpotifyTrack[]> => {
+  const apiClient = getApiClient(token);
+  try {
+    const response = await apiClient.get('/search', {
+      params: { 
+        q: query, 
+        type: 'track', 
+        limit: 50 // Fetch up to 50 tracks to build a good playlist
+      }, 
     });
+    return response.data.tracks.items;
+  } catch (error) {
+    console.error('Error in spotifyService searching for tracks:', error);
+    throw error;
+  }
+};
 
-    if (!response.ok) {
-      throw new Error('Failed to search playlists');
+/**
+ * Starts or resumes playback on a specific device.
+ * @param token The user's access token.
+ * @param deviceId The ID of the device to play on (from the Web Playback SDK).
+ * @param trackUris An array of Spotify Track URIs to play.
+ */
+const playTracks = async (token: string, deviceId: string, trackUris: string[]) => {
+    const apiClient = getApiClient(token);
+    try {
+        // This command tells the Spotify API to start playing the provided tracks on the specified device.
+        await apiClient.put(`/me/player/play?device_id=${deviceId}`, {
+            uris: trackUris,
+        });
+    } catch (error) {
+        console.error('Error starting playback:', error);
+        throw error;
     }
+};
 
-    const data = await response.json();
-    return data.playlists.items;
-  }
 
-  async getPlaylistTracks(playlistId: string): Promise<SpotifyTrack[]> {
-    const credentials = this.getCredentials();
-    if (!credentials) throw new Error('No credentials available');
+export const spotifyService = {
+  searchTracks,
+  playTracks,
+};
 
-    const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=10`, {
-      headers: {
-        'Authorization': `Bearer ${credentials.accessToken}`,
-      },
-    });
 
-    if (!response.ok) {
-      throw new Error('Failed to get playlist tracks');
-    }
-
-    const data = await response.json();
-    return data.items.map((item: any) => item.track);
-  }
-
-  generateAuthUrl(clientId: string, redirectUri: string): string {
-    const scope = 'playlist-read-private playlist-read-collaborative user-read-private';
-    const state = Math.random().toString(36).substring(7);
-    
-    // Store state for verification
-    localStorage.setItem('spotify_auth_state', state);
-    
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: clientId,
-      scope,
-      redirect_uri: redirectUri,
-      state: state,
-      show_dialog: 'true'
-    });
-
-    return `https://accounts.spotify.com/authorize?${params.toString()}`;
-  }
-
-  extractCodeFromUrl(): string | null {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    const storedState = localStorage.getItem('spotify_auth_state');
-    
-    if (state && storedState && state === storedState) {
-      localStorage.removeItem('spotify_auth_state');
-      return code;
-    }
-    
-    return null;
-  }
-
-  // Note: This would normally require a backend to exchange code for token
-  // For demo purposes, we'll show instructions for manual token input
-  async exchangeCodeForToken(code: string, clientId: string, redirectUri: string): Promise<string | null> {
-    // This would normally be done on the backend for security
-    console.log('Authorization code received:', code);
-    console.log('You would normally exchange this on your backend for an access token');
-    return null;
-  }
-}
-
-export const spotifyService = new SpotifyService();
-export type { SpotifyCredentials, SpotifyPlaylist, SpotifyTrack };
